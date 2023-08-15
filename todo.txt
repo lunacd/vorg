@@ -1,0 +1,5 @@
+1. Use fts4
+2. Migrate to sqlx
+3. Use collections
+4. Implement db migration from v1 to v2.
+5. Implement commandline metadata import

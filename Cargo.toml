@@ -1,0 +1,27 @@
+[package]
+name = "vorgrs"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+sha2 = "0.10.7"
+hex = "0.4.3"
+sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite"] }
+magic = "0.13.0"
+tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread"] }
+lazy_static = "1.4.0"
+
+[dev-dependencies]
+serial_test = "2.0.0"
+test-context = "0.1.4"
+async-trait = "0.1.73"
+
+[profile.dev.package.sqlx-macros]
+opt-level = 3
+
+[package.metadata.vcpkg]
+git = "https://github.com/microsoft/vcpkg"
+rev = "9edb1b8"
+dependencies = []
