@@ -14,7 +14,7 @@ use std::{
 
 use db::DB;
 
-pub use db::File;
+pub use db::Item;
 pub use error::{Error, ErrorKind, Result};
 
 lazy_static! {
@@ -26,7 +26,6 @@ lazy_static! {
     };
 }
 
-#[derive(Debug)]
 pub struct Repo {
     db: DB,
     path: PathBuf,
@@ -290,8 +289,8 @@ impl Repo {
     ///
     /// TODO: Add filtering.
     ///
-    pub async fn get_files(&mut self) -> Result<Vec<File>> {
-        self.db.get_files().await
+    pub async fn get_files(&mut self) -> Result<Vec<Item>> {
+        self.db.get_items().await
     }
 
     /**
@@ -312,7 +311,7 @@ impl Repo {
     pub async fn check_data_integrity(&mut self) -> Result<String> {
         let mut result = String::new();
 
-        let db_files = self.db.get_files().await?;
+        let db_files = self.db.get_items().await?;
 
         // Check store
         let mut store_files = Vec::new();
@@ -435,8 +434,6 @@ impl Repo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
-    use tokio::test;
 
     struct TestFixture<T>
     where

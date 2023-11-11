@@ -1,3 +1,5 @@
+Investigate why verify table isn't doing its job.
+
 1. Use fts4
 2. Migrate to sqlx
 3. Use collections

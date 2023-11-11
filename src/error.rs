@@ -7,7 +7,7 @@ pub struct Error {
     pub kind: ErrorKind,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ErrorKind {
     /// The requested file is not found.
     FileNotFound,

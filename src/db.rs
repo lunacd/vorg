@@ -7,77 +7,30 @@ use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteRow},
     ConnectOptions, Connection, Row, Sqlite, SqliteConnection,
 };
-use std::{fmt::Debug, fs, path::Path, str::FromStr};
+use std::{fs, path::Path, str::FromStr};
 
 pub struct DB {
     connection: SqliteConnection,
 }
 
-// Placeholder implementation for unwrap_err
-impl Debug for DB {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Placeholder debug implementation for vorgrs::db::DB")
-    }
-}
-
-pub struct File {
+pub struct Item {
     pub hash: String,
     pub title: String,
     pub ext: String,
-    pub studio: Option<String>,
-    pub actors: Vec<String>,
+    pub collection_id: i64,
     pub tags: Vec<String>,
 }
 
-impl sqlx::FromRow<'_, SqliteRow> for File {
+impl sqlx::FromRow<'_, SqliteRow> for Item {
     fn from_row(row: &SqliteRow) -> sqlx::Result<Self> {
-        Ok(File {
+        Ok(Item {
             hash: row.try_get("hash")?,
             title: row.try_get("title")?,
             ext: row.try_get("ext")?,
-            studio: row.try_get("studio_name")?,
-            actors: Vec::new(),
+            collection_id: row.try_get("collection_id")?,
             tags: Vec::new(),
         })
     }
-}
-
-/// Macro definitions for defining management routines (like insert and cleanup) for many-to-many
-/// metadata (like actors and tags).
-macro_rules! define_insert_routine {
-    ( $name:ident, $insert_name:ident ) => {
-        /**
-         * Insert a new $name for an item.
-         */
-        pub async fn $insert_name(&mut self, item_id: i64, $name: &str) -> Result<()> {
-            // Check if the given $name exists
-            let query = concat!(
-                "INSERT OR IGNORE INTO ",
-                stringify!($name),
-                "s(name) VALUES (?)"
-            );
-            sqlx::query(query)
-                .bind($name)
-                .execute(&mut self.connection)
-                .await?;
-            let query = concat!(
-                "INSERT INTO item_",
-                stringify!($name),
-                "(item_id, ",
-                stringify!($name),
-                "_id) SELECT ?, tag_id FROM tags",
-                "WHERE ",
-                stringify!($name),
-                "_name=?"
-            );
-            sqlx::query(query)
-                .bind(item_id)
-                .bind($name)
-                .execute(&mut self.connection)
-                .await?;
-            Ok(())
-        }
-    };
 }
 
 impl DB {
@@ -112,56 +65,12 @@ impl DB {
             // Database does not exist, create a new one
             let db_path_parent = db_path
                 .parent()
-                .expect("db_path's parent should be a folder.");
+                .expect("Database's path should have a parent, i.e. not root.");
             fs::create_dir_all(db_path_parent)?;
             DB::create_db(&db_path_string)
                 .await
                 .map(|connection| DB { connection })
         }
-    }
-
-    /// Import a file into the database with an Incomplete tag.
-    pub async fn import_file(&mut self, title: &String, ext: &String, hash: &String) -> Result<()> {
-        // TODO: return error on duplicates
-        // Insert item
-        let query = "
-        INSERT INTO items (hash,title,studio_id,ext)
-        VALUES (?, ?, 0, ?)
-        RETURNING item_id
-        ";
-        let result_row = sqlx::query(query)
-            .bind(hash)
-            .bind(title)
-            .bind(ext)
-            .fetch_one(&mut self.connection)
-            .await?;
-        let item_id = result_row.try_get("item_id")?;
-        // Add tag
-        self.insert_tag(item_id, "Incomplete").await?;
-        Ok(())
-    }
-
-    define_insert_routine!(tag, insert_tag);
-
-    /// Get files that satisfy the given filter.
-    ///
-    /// TODO: Add filtering.
-    /// TODO: Return tags and actors
-    pub async fn get_files(&mut self) -> Result<Vec<File>> {
-        // Access items table
-        let query = "
-        SELECT hash,title,ext,studio_id,name AS studio_name
-        FROM items AS i
-        JOIN studios AS s ON i.studio_id = s.studio_id
-        ORDER BY hash
-        ";
-        let result = sqlx::query_as::<_, File>(query)
-            .fetch_all(&mut self.connection)
-            .await?;
-
-        // TODO: get tags and actors
-
-        Ok(result)
     }
 
     /// Creates a new sqlite db to be used as vorg db.
@@ -175,40 +84,50 @@ impl DB {
         let mut connection = SqliteConnection::connect(db_path_str).await?;
 
         // Initialize tables
-        let init_query = "
-        CREATE TABLE tags (
-            tag_id INTEGER PRIMARY KEY NOT NULL,
-            name TEXT NOT NULL
-        );
-        CREATE TABLE collections (
-            collection_id INTEGER PRIMARY KEY NOT NULL,
-            title_id INTEGER NOT NULL,
-            FOREIGN KEY (title_id) REFERENCES titles(rowid)
-        );
-        CREATE TABLE items (
-            item_id INTEGER PRIMARY KEY NOT NULL,
-            hash VARCHAR(64) NOT NULL,
-            ext TEXT NOT NULL
-        );
-        CREATE TABLE collection_item (
-            collection_id INTEGER NOT NULL,
-            item_id INTEGER NOT NULL,
-            PRIMARY KEY (collection_id, item_id),
-            FOREIGN KEY (collection_id) REFERENCES collections(collection_id),
-            FOREIGN KEY (item_id) REFERENCES items(item_id)
-        );
-        CREATE TABLE collection_tag (
-            collection_id INTEGER NOT NULL,
-            tag_id INTEGER NOT NULL,
-            PRIMARY KEY (collection_id, tag_id),
-            FOREIGN KEY (collection_id) REFERENCES collections(collection_id),
-            FOREIGN KEY (tag_id) REFERENCES tags(tag_id)
-        );
-        CREATE VIRTUAL TABLE titles USING fts5(title);
-        CREATE UNIQUE INDEX hash_index ON items (hash);
-        CREATE UNIQUE INDEX tag_index ON tags (name);
-        ";
-        sqlx::query(init_query).execute(&mut connection).await?;
+        sqlx::query(
+        "
+            CREATE TABLE tags (
+                tag_id INTEGER PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL
+            );
+            CREATE TABLE collections (
+                collection_id INTEGER PRIMARY KEY NOT NULL,
+                title TEXT NOT NULL
+            );
+            CREATE TABLE items (
+                item_id INTEGER PRIMARY KEY NOT NULL,
+                collection_id INTEGER NOT NULL,
+                ext TEXT NOT NULL,
+                hash VARCHAR(64) NOT NULL,
+                FOREIGN KEY (collection_id) REFERENCES collections(collection_id)
+            );
+            CREATE TABLE collection_tag (
+                collection_id INTEGER NOT NULL,
+                tag_id INTEGER NOT NULL,
+                PRIMARY KEY (collection_id, tag_id),
+                FOREIGN KEY (collection_id) REFERENCES collections(collection_id),
+                FOREIGN KEY (tag_id) REFERENCES tags(tag_id)
+            );
+            CREATE VIRTUAL TABLE title_fts USING fts5(
+                title,
+                content='collections',
+                content_rowid='collection_id'
+            );
+            CREATE TRIGGER title_insert AFTER INSERT ON collections BEGIN
+                INSERT INTO title_fts(rowid, title) VALUES (new.collection_id, new.title);
+            END;
+            CREATE TRIGGER title_delete AFTER DELETE ON collections BEGIN
+                INSERT INTO title_fts(title_fts, rowid, title)
+                    VALUES('delete', old.collection_id, old.title);
+            END;
+            CREATE TRIGGER title_update AFTER UPDATE ON collections BEGIN
+                INSERT INTO title_fts(fts_idx, rowid, title) VALUES('delete', old.collection_id, old.title);
+                INSERT INTO title_fts(rowid, title) VALUES (new.collection_id, new.title);
+            END;
+            CREATE UNIQUE INDEX hash_index ON items (hash);
+            CREATE UNIQUE INDEX tag_index ON tags (name);
+            "
+        ).execute(&mut connection).await?;
 
         Ok(connection)
     }
@@ -218,43 +137,29 @@ impl DB {
     /// If valid, returns no error.
     /// If not valid, returns a `InvalidDatabase` error with a message describing why.
     async fn validate_db(connection: &mut SqliteConnection) -> Result<()> {
-        let table_query = "
-        SELECT tbl_name from sqlite_master
-        WHERE type='table' ORDER BY tbl_name;
-        ";
-
-        static EXPECTED_TABLE_NAMES: [&str; 11] = [
-            "collection_item",
+        static EXPECTED_TABLE_NAMES: [&str; 9] = [
             "collection_tag",
             "collections",
             "items",
             "tags",
-            "titles",
-            "titles_config",
-            "titles_content",
-            "titles_data",
-            "titles_docsize",
-            "titles_idx",
+            "title_fts",
+            "title_fts_config",
+            "title_fts_data",
+            "title_fts_docsize",
+            "title_fts_idx",
         ];
-        static VERIFY_COLUMNS: [bool; 11] = [
-            true, true, true, true, true, false, false, false, false, false, false,
-        ];
-        static EXPECTED_COLUMNS: [(usize, [(&str, &str); 3]); 5] = [
-            // collection_item
-            (
-                2,
-                [
-                    ("collection_id", "INTEGER"),
-                    ("item_id", "INTEGER"),
-                    ("", ""),
-                ],
-            ),
+        static EXPECTED_INDICES: [&str; 2] = ["hash_index", "tag_index"];
+        static EXPECTED_TRIGGERS: [&str; 3] = ["title_delete", "title_insert", "title_update"];
+        static VERIFY_COLUMNS: [bool; 9] =
+            [true, true, true, true, false, false, false, false, false];
+        static EXPECTED_COLUMNS: [(usize, [(&str, &str); 4]); 4] = [
             // collection_tag
             (
                 2,
                 [
                     ("collection_id", "INTEGER"),
                     ("tag_id", "INTEGER"),
+                    ("", ""),
                     ("", ""),
                 ],
             ),
@@ -263,28 +168,45 @@ impl DB {
                 2,
                 [
                     ("collection_id", "INTEGER"),
-                    ("title_id", "INTEGER"),
+                    ("title", "TEXT"),
+                    ("", ""),
                     ("", ""),
                 ],
             ),
             // items
             (
-                3,
+                4,
                 [
+                    ("collection_id", "INTEGER"),
                     ("ext", "TEXT"),
                     ("hash", "VARCHAR(64)"),
                     ("item_id", "INTEGER"),
                 ],
             ),
             // tags
-            (2, [("name", "TEXT"), ("tag_id", "INTEGER"), ("", "")]),
+            (
+                2,
+                [("name", "TEXT"), ("tag_id", "INTEGER"), ("", ""), ("", "")],
+            ),
         ];
 
-        let result: Vec<String> = sqlx::query(table_query)
-            .try_map(|row: SqliteRow| row.try_get("tbl_name"))
-            .fetch_all(&mut *connection)
-            .await?;
-        let table_names: Vec<&str> = result.iter().map(String::as_str).collect();
+        let result = sqlx::query!(
+            "
+            SELECT tbl_name from sqlite_master
+            WHERE type='table' ORDER BY tbl_name
+            "
+        )
+        .map(|row| row.tbl_name)
+        .fetch_all(&mut *connection)
+        .await?;
+        let table_names: Vec<&str> = result
+            .iter()
+            .filter_map(|tbl_name_option| {
+                tbl_name_option
+                    .as_ref()
+                    .and_then(|tbl_name| Some(tbl_name.as_str()))
+            })
+            .collect();
 
         // Validate table name
         let compare_result = utils::compare_lists(
@@ -296,13 +218,13 @@ impl DB {
         match compare_result {
             ListCompareResult::Missing(table_name) => {
                 return Err(Error {
-                    msg: format!("Table {table_name} is missing from the database.",),
+                    msg: format!("Table \"{table_name}\" is missing from the database.",),
                     kind: ErrorKind::DB,
                 });
             }
             ListCompareResult::Unexpected(table_name) => {
                 return Err(Error {
-                    msg: format!("Unexpected table {table_name} exists in the database."),
+                    msg: format!("Unexpected table \"{table_name}\" exists in the database."),
                     kind: ErrorKind::DB,
                 });
             }
@@ -327,6 +249,69 @@ impl DB {
             }
         }
 
+        // Validate indices
+        let result = sqlx::query!(
+            "
+            SELECT name FROM sqlite_master
+            WHERE type = 'index'
+            AND sql IS NOT NULL
+            ORDER BY name
+            "
+        )
+        .map(|row| row.name)
+        .fetch_all(&mut *connection)
+        .await?;
+        let indices: Vec<&str> = result
+            .iter()
+            .filter_map(|index_name| index_name.as_ref().and_then(|name| Some(name.as_str())))
+            .collect();
+        let compare_result = utils::compare_lists(
+            &indices,
+            &EXPECTED_INDICES,
+            |index_name| index_name,
+            |_, _| true,
+        );
+        match compare_result {
+            ListCompareResult::Identical => (),
+            _ => {
+                return Err(Error {
+                    msg: format!("Database has unexpected or missing indices."),
+                    kind: ErrorKind::DB,
+                });
+            }
+        }
+
+        // Validate triggers
+        let result = sqlx::query!(
+            "
+            SELECT name FROM sqlite_master
+            WHERE type = 'trigger'
+            ORDER BY name
+            "
+        )
+        .map(|row| row.name)
+        .fetch_all(&mut *connection)
+        .await?;
+        let triggers: Vec<&str> = result
+            .iter()
+            .filter_map(|index_name| index_name.as_ref().and_then(|name| Some(name.as_str())))
+            .collect();
+        let compare_result = utils::compare_lists(
+            &triggers,
+            &EXPECTED_TRIGGERS,
+            |index_name| index_name,
+            |_, _| true,
+        );
+        match compare_result {
+            ListCompareResult::Identical => (),
+            _ => {
+                return Err(Error {
+                    msg: format!("Database has unexpected or missing triggers."),
+                    kind: ErrorKind::DB,
+                });
+            }
+        }
+
         Ok(())
     }
 
@@ -340,12 +325,12 @@ impl DB {
         expected_columns: &[(&str, &str)],
         expected_column_count: usize,
     ) -> Result<()> {
-        let query = "SELECT name,type FROM pragma_table_info(?) ORDER BY name";
-        let columns: Vec<(String, String)> = sqlx::query(query)
-            .bind(table_name)
-            .try_map(|row: SqliteRow| Ok((row.try_get("name")?, row.try_get("type")?)))
-            .fetch_all(connection)
-            .await?;
+        let columns: Vec<(String, String)> =
+            sqlx::query("SELECT name,type FROM pragma_table_info(?) ORDER BY name")
+                .bind(table_name)
+                .try_map(|row: SqliteRow| Ok((row.try_get("name")?, row.try_get("type")?)))
+                .fetch_all(connection)
+                .await?;
 
         let columns: Vec<(&str, &str)> = columns
             .iter()
@@ -362,20 +347,26 @@ impl DB {
         match compare_result {
             ListCompareResult::Missing(column) => {
                 return Err(Error {
-                    msg: format!("Column {} is missing from table {table_name}.", column.0),
+                    msg: format!(
+                        "Column \"{}\" is missing from table \"{table_name}\".",
+                        column.0
+                    ),
                     kind: ErrorKind::DB,
                 });
             }
             ListCompareResult::Unexpected(column) => {
                 return Err(Error {
-                    msg: format!("Unexpected column {} in table {table_name}.", column.0),
+                    msg: format!(
+                        "Unexpected column \"{}\" in table \"{table_name}\".",
+                        column.0
+                    ),
                     kind: ErrorKind::DB,
                 });
             }
             ListCompareResult::Unequal(column) => {
                 return Err(Error {
                     msg: format!(
-                        "Column {} in table {table_name} should have type {}.",
+                        "Column \"{}\" in table \"{table_name}\" should have type \"{}\".",
                         column.0, column.1
                     ),
                     kind: ErrorKind::DB,
@@ -387,34 +378,141 @@ impl DB {
         Ok(())
     }
 
-    // /**
-    //  * Get studio name by id
-    //  */
-    // async fn get_studio(&mut self, studio_id: i64) -> Result<String> {
-    //     if let Some(studio) = self.studio_cache.get(&studio_id) {
-    //         Ok(studio.to_owned())
-    //     } else {
-    //         let query = "SELECT name FROM studios WHERE studio_id=?";
-    //         let studio: String = sqlx::query(query)
-    //             .bind(studio_id)
-    //             .try_map(|row: SqliteRow| Ok(row.try_get("name")?))
-    //             .fetch_one(&mut self.connection)
-    //             .await?;
-    //         self.studio_cache.insert(studio_id, studio.clone());
-    //         Ok(studio)
-    //     }
-    // }
+    /// Start a new SQL transaction
+    async fn begin_transaction(&mut self) -> Result<()> {
+        sqlx::query!("BEGIN TRANSACTION")
+            .execute(&mut self.connection)
+            .await?;
+        Ok(())
+    }
+
+    /// Commit SQL transaction
+    async fn commit_transaction(&mut self) -> Result<()> {
+        sqlx::query!("COMMIT TRANSACTION")
+            .execute(&mut self.connection)
+            .await?;
+        Ok(())
+    }
+
+    /// Add a new collection in db
+    async fn add_collection(&mut self, title: &str) -> Result<i64> {
+        let collection_id = sqlx::query!(
+            "
+            INSERT INTO collections(title) VALUES(?)
+            RETURNING collection_id;
+            ",
+            title
+        )
+        .map(|row| row.collection_id)
+        .fetch_one(&mut self.connection)
+        .await?;
+        Ok(collection_id)
+    }
+
+    async fn add_item_to_collection(
+        &mut self,
+        collection_id: i64,
+        hash: &str,
+        ext: &str,
+    ) -> Result<i64> {
+        let item_id = sqlx::query!(
+            "
+            INSERT OR ROLLBACK INTO items(collection_id, hash, ext)
+            VALUES (?, ?, ?)
+            RETURNING item_id
+            ",
+            collection_id,
+            hash,
+            ext
+        )
+        .map(|row| row.item_id)
+        .fetch_one(&mut self.connection)
+        .await?;
+        Ok(item_id)
+    }
+
+    /// Insert a new tag for an item.
+    pub async fn add_tag_to_collection(&mut self, collection_id: i64, tag: &str) -> Result<()> {
+        // Check if the given $name exists
+        sqlx::query!("INSERT OR IGNORE INTO tags(name) VALUES (?)", tag)
+            .execute(&mut self.connection)
+            .await?;
+        sqlx::query!(
+            "
+            INSERT INTO collection_tag(collection_id, tag_id)
+            SELECT ?, tag_id FROM tags WHERE name=?;
+            ",
+            collection_id,
+            tag
+        )
+        .execute(&mut self.connection)
+        .await?;
+        Ok(())
+    }
+
+    /// Import a file into the database with an Incomplete tag.
+    pub async fn import_file(&mut self, title: &str, hash: &str, ext: &str) -> Result<()> {
+        self.begin_transaction().await?;
+        // Add collection
+        let collection_id = self.add_collection(title).await?;
+        // Add item to collection
+        let Ok(item_id) = self.add_item_to_collection(collection_id, hash, ext).await else {
+            return Err(Error {
+                msg: String::from("The item to import already exists in the database."),
+                kind: ErrorKind::Duplicate,
+            });
+        };
+        // Add tag
+        self.add_tag_to_collection(item_id, "meta:Incomplete")
+            .await?;
+        self.commit_transaction().await?;
+        Ok(())
+    }
+
+    /// Get files that satisfy the given filter.
+    ///
+    /// TODO: Add filtering.
+    pub async fn get_items(&mut self) -> Result<Vec<Item>> {
+        // Access items table
+        let items_query = "
+        SELECT hash, title, ext, c.collection_id
+        FROM collections c
+        JOIN items i ON c.collection_id = i.collection_id
+        ORDER BY hash
+        ";
+        let mut items = sqlx::query_as::<_, Item>(items_query)
+            .fetch_all(&mut self.connection)
+            .await?;
+
+        for item in items.iter_mut() {
+            let tags = sqlx::query!(
+                "
+                SELECT name FROM tags t
+                JOIN collection_tag ct
+                ON ct.tag_id = t.tag_id
+                JOIN collections c
+                ON c.collection_id = ct.collection_id
+                WHERE c.collection_id = ?
+                ",
+                item.collection_id
+            )
+            .map(|row| row.name)
+            .fetch_all(&mut self.connection)
+            .await?;
+            item.tags = tags;
+        }
+
+        Ok(items)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serial_test::serial;
+    use rstest::rstest;
     use test_context::{test_context, AsyncTestContext};
-    use tokio::{
-        test,
-        time::{sleep, Duration},
-    };
+    use tokio::time::{sleep, Duration};
+    use uuid::Uuid;
 
     struct TempFolder {
         pub path: std::path::PathBuf,
@@ -423,7 +521,10 @@ mod tests {
     #[async_trait::async_trait]
     impl AsyncTestContext for TempFolder {
         async fn setup() -> TempFolder {
-            let temp_dir = std::path::PathBuf::from("./temp");
+            let uuid = Uuid::new_v4();
+            let temp_dir_path =
+                String::from("temp-") + uuid.hyphenated().encode_lower(&mut Uuid::encode_buffer());
+            let temp_dir = std::path::PathBuf::from(temp_dir_path);
             fs::create_dir(&temp_dir).expect("Failed to create temp dir for testing.");
             TempFolder { path: temp_dir }
         }
@@ -438,9 +539,8 @@ mod tests {
     }
 
     #[test_context(TempFolder)]
-    #[serial]
-    #[test]
-    async fn create_db_success(ctx: &TempFolder) -> Result<()> {
+    #[tokio::test]
+    async fn test_create_db_success(ctx: &TempFolder) -> Result<()> {
         // GIVEN
         let db_path = ctx.path.join("vorg.db");
 
@@ -452,34 +552,41 @@ mod tests {
         let mut db = SqliteConnection::connect(&db_path.to_string_lossy()).await?;
 
         // Verify required tables
-        let test_query = "
-        SELECT tbl_name FROM sqlite_master
-        WHERE type='table'
-        AND tbl_name IN (
-            'tags', 'items', 'collections', 'collection_tag', 'collection_item', 'titles'
-        );
-        ";
-        let num_rows = sqlx::query(test_query).fetch_all(&mut db).await?.len();
-        assert_eq!(num_rows, 6);
+        let num_rows = sqlx::query!(
+            "
+            SELECT tbl_name FROM sqlite_master
+            WHERE type='table'
+            AND tbl_name IN (
+                'tags', 'items', 'collections', 'collection_tag', 'title_fts'
+            );
+            ",
+        )
+        .fetch_all(&mut db)
+        .await?
+        .len();
+        assert_eq!(num_rows, 5);
 
         // Verify required indices
-        let test_query = "
-        SELECT tbl_name FROM sqlite_master
-        WHERE type='index'
-        AND name IN (
-            'hash_index', 'tag_index'
-        );
-        ";
-        let num_rows = sqlx::query(test_query).fetch_all(&mut db).await?.len();
+        let num_rows = sqlx::query!(
+            "
+            SELECT tbl_name FROM sqlite_master
+            WHERE type='index'
+            AND name IN (
+                'hash_index', 'tag_index'
+            );
+            ",
+        )
+        .fetch_all(&mut db)
+        .await?
+        .len();
         assert_eq!(num_rows, 2);
 
         Ok(())
     }
 
     #[test_context(TempFolder)]
-    #[serial]
-    #[test]
-    async fn create_db_failed_db(ctx: &TempFolder) -> Result<()> {
+    #[tokio::test]
+    async fn test_create_db_failed_db(ctx: &TempFolder) -> Result<()> {
         // GIVEN
         let db_path = ctx.path.join("vorg.db");
 
@@ -487,20 +594,20 @@ mod tests {
         fs::create_dir_all(&db_path)?;
 
         // WHEN
-        let result = DB::new(db_path).await;
+        let result = DB::new(&db_path).await;
 
         // THEN
         assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert!(matches!(error.kind, ErrorKind::DB));
+        if let Err(error) = result {
+            assert!(matches!(error.kind, ErrorKind::DB));
+        }
 
         Ok(())
     }
 
     #[test_context(TempFolder)]
-    #[serial]
-    #[test]
-    async fn create_db_failed_io(ctx: &TempFolder) -> Result<()> {
+    #[tokio::test]
+    async fn test_create_db_failed_io(ctx: &TempFolder) -> Result<()> {
         // GIVEN
         let db_path = ctx.path.join("parent").join("vorg.db");
 
@@ -516,155 +623,173 @@ mod tests {
 
         // THEN
         assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert!(matches!(error.kind, ErrorKind::IO));
+        if let Err(error) = result {
+            assert!(matches!(error.kind, ErrorKind::IO));
+        }
 
         Ok(())
     }
 
-    #[test]
-    async fn test_open_db() -> Result<()> {
+    #[tokio::test]
+    async fn test_open_db_success() -> Result<()> {
         DB::new("resources/db/valid.db").await?;
 
         Ok(())
     }
 
-    // #[test]
-    // async fn test_open_db_invalid1() {
-    //     let result = DB::new("resources/db/invalid-too-many-table.db").await;
-    //     assert!(result.is_err());
-    //     assert_eq!(
-    //         result.unwrap_err().to_string(),
-    //         "DB has more tables than expected."
-    //     );
-    // }
+    #[rstest]
+    #[case(
+        "resources/db/invalid_unexpected_table.db",
+        "Unexpected table \"table_unexpected\" exists in the database."
+    )]
+    #[case(
+        "resources/db/invalid_missing_table.db",
+        "Table \"items\" is missing from the database."
+    )]
+    #[case(
+        "resources/db/invalid_unexpected_column.db",
+        "Unexpected column \"studio_id\" in table \"items\"."
+    )]
+    #[case(
+        "resources/db/invalid_missing_column.db",
+        "Column \"ext\" is missing from table \"items\"."
+    )]
+    #[case(
+        "resources/db/invalid_wrong_column_type.db",
+        "Column \"hash\" in table \"items\" should have type \"VARCHAR(64)\"."
+    )]
+    #[case(
+        "resources/db/invalid_missing_index.db",
+        "Database has unexpected or missing indices."
+    )]
+    #[case(
+        "resources/db/invalid_missing_trigger.db",
+        "Database has unexpected or missing triggers."
+    )]
+    #[tokio::test]
+    async fn test_open_db_error(#[case] db_path: &str, #[case] err_msg: &str) {
+        // WHEN
+        let result = DB::new(db_path).await;
 
-    // #[test]
-    // async fn test_open_db_invalid2() {
-    //     let result = DB::new("resources/db/invalid-unexpected-table.db").await;
-    //     assert!(result.is_err());
-    //     assert_eq!(
-    //         result.unwrap_err().to_string(),
-    //         "Unexpected table: invalid_table."
-    //     );
-    // }
+        // THEN
+        assert!(result.is_err());
+        if let Err(error) = result {
+            assert_eq!(error.kind, ErrorKind::DB);
+            assert_eq!(error.to_string(), err_msg);
+        }
+    }
 
-    // #[test]
-    // async fn test_open_db_invalid3() {
-    //     let result = DB::new("resources/db/invalid-not-enough-table.db").await;
-    //     assert!(result.is_err());
-    //     assert_eq!(
-    //         result.unwrap_err().to_string(),
-    //         "DB has less tables than expected."
-    //     );
-    // }
+    #[test_context(TempFolder)]
+    #[tokio::test]
+    async fn test_import_file(ctx: &TempFolder) -> Result<()> {
+        // GIVEN
+        let db_path = ctx.path.join("vorg.db");
+        let mut db = DB::new(&db_path).await.unwrap();
 
-    // #[test]
-    // async fn test_open_db_invalid4() {
-    //     let result = DB::new("resources/db/invalid-too-many-column.db").await;
-    //     assert!(result.is_err());
-    //     assert_eq!(
-    //         result.unwrap_err().to_string(),
-    //         "Table items has more columns than expected."
-    //     );
-    // }
+        // WHEN
+        // Import file
+        let title = "Test title";
+        let ext = "mp4";
+        let hash = "09c683231bb0e88e84a8408fdbfe174c70d83d03e0604eb612631e79";
+        let result = db.import_file(&title, &hash, &ext).await;
 
-    // #[test]
-    // async fn test_open_db_invalid5() {
-    //     let result = DB::new("resources/db/invalid-unexpected-column.db").await;
-    //     assert!(result.is_err());
-    //     assert_eq!(
-    //         result.unwrap_err().to_string(),
-    //         "Table items has unexpected column: invalid_column, VARCHAR(64)"
-    //     );
-    // }
+        // THEN
+        assert!(result.is_ok());
+        // Test file has been imported
+        let mut connection = SqliteConnection::connect(&db_path.to_string_lossy()).await?;
+        let item_exists_query = "
+        SELECT hash FROM collections c, items i, collection_tag ct, tags t
+        WHERE c.collection_id=ct.collection_id
+        AND ct.tag_id=t.tag_id
+        AND i.collection_id=c.collection_id
+        AND t.name='meta:Incomplete'
+        AND title=?
+        AND ext=?
+        AND hash=?
+        ";
+        assert_eq!(
+            sqlx::query(item_exists_query)
+                .bind(title)
+                .bind(ext)
+                .bind(hash)
+                .fetch_all(&mut connection)
+                .await?
+                .len(),
+            1
+        );
 
-    // #[test]
-    // async fn test_open_db_invalid6() {
-    //     let result = DB::new("resources/db/invalid-not-enough-column.db").await;
-    //     assert!(result.is_err());
-    //     assert_eq!(
-    //         result.unwrap_err().to_string(),
-    //         "Table items has less columns than expected."
-    //     );
-    // }
+        // WHEN
+        // Test duplicate import
+        let duplicate_title = "Another title";
+        let result = db.import_file(duplicate_title, &hash, &ext).await;
 
-    // #[test]
-    // async fn test_db_import_file() -> Result<()> {
-    //     let _f = TestFixture::new("temp/db_import_file");
+        // THEN
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "The item to import already exists in the database."
+        );
+        // Make sure no redundant collection is created.
+        assert_eq!(
+            sqlx::query!(
+                "
+                SELECT title FROM collections
+                WHERE title = ?
+                ",
+                duplicate_title
+            )
+            .fetch_all(&mut connection)
+            .await?
+            .len(),
+            0
+        );
 
-    //     let db_path = "temp/db_import_file/vorg.db";
-    //     let mut db = DB::new(db_path).await.unwrap();
+        // WHEN
+        // Test reusing tag
+        let hash2 = "4effadeed3957d9dab1a645b9a7d01c18380d54e71d51148fdf84633";
+        let title2 = "Some title";
+        let result = db.import_file(&title2, &hash2, &ext).await;
 
-    //     // Import file
-    //     let title = String::from("Test title");
-    //     let ext = String::from("mp4");
-    //     let hash = String::from("09c683231bb0e88e84a8408fdbfe174c70d83d03e0604eb612631e79");
-    //     let result = db.import_file(&title, &ext, &hash).await;
-    //     assert!(result.is_ok());
+        // THEN
+        assert!(result.is_ok());
+        assert_eq!(
+            sqlx::query(item_exists_query)
+                .bind(title2)
+                .bind(ext)
+                .bind(hash2)
+                .fetch_all(&mut connection)
+                .await?
+                .len(),
+            1
+        );
 
-    //     // Test file has been imported
-    //     let mut connection = SqliteConnection::connect(db_path).await?;
-    //     let test_query = "
-    //         SELECT hash FROM items i, item_tag it, tags t
-    //         WHERE i.item_id=it.item_id
-    //         AND it.tag_id=t.tag_id
-    //         AND t.name='Incomplete'
-    //         AND title='Test title'
-    //         AND ext='mp4'
-    //         AND hash='09c683231bb0e88e84a8408fdbfe174c70d83d03e0604eb612631e79'
-    //     ";
-    //     assert_eq!(
-    //         sqlx::query(test_query)
-    //             .fetch_all(&mut connection)
-    //             .await?
-    //             .len(),
-    //         1
-    //     );
+        Ok(())
+    }
 
-    //     // Test duplicate import
-    //     let result = db.import_file(&title, &ext, &hash).await;
-    //     assert!(result.is_err());
-    //     assert_eq!(
-    //         result.unwrap_err().to_string(),
-    //         "The item to import already exists in the database."
-    //     );
+    #[test_context(TempFolder)]
+    #[tokio::test]
+    async fn test_get_items(ctx: &TempFolder) -> Result<()> {
+        // GIVEN
+        let db_path = ctx.path.join("vorg.db");
+        let mut db = DB::new(&db_path).await.unwrap();
 
-    //     // Test reusing tag
-    //     let hash2 = String::from("4effadeed3957d9dab1a645b9a7d01c18380d54e71d51148fdf84633");
-    //     let title2 = String::from("Some title");
-    //     let result = db.import_file(&title2, &ext, &hash2).await;
-    //     assert!(result.is_ok());
-    //     let test_query = "
-    //     SELECT hash FROM items i, item_tag it, tags t
-    //     WHERE i.item_id=it.item_id
-    //     AND it.tag_id=t.tag_id
-    //     AND t.name='Incomplete'
-    //     AND title='Some title'
-    //     AND ext='mp4'
-    //     AND hash='4effadeed3957d9dab1a645b9a7d01c18380d54e71d51148fdf84633'
-    //     ";
-    //     assert_eq!(
-    //         sqlx::query(test_query)
-    //             .fetch_all(&mut connection)
-    //             .await?
-    //             .len(),
-    //         1
-    //     );
+        // Import file
+        let title = "Test title";
+        let ext = "mp4";
+        let hash = "09c683231bb0e88e84a8408fdbfe174c70d83d03e0604eb612631e79";
+        let result = db.import_file(&title, &hash, &ext).await;
+        assert!(result.is_ok());
 
-    //     Ok(())
-    // }
+        // WHEN
+        let items = db.get_items().await?;
 
-    // #[test]
-    // async fn test_debug_fmt() {
-    //     let _f = TestFixture::new("temp/db_debug_fmt");
-
-    //     let db_path = "temp/db_debug_fmt/vorg.db";
-    //     let db = DB::new(db_path).await.unwrap();
-    //     let debug_fmt = format!("{db:?}");
-    //     assert_eq!(
-    //         debug_fmt,
-    //         "Placeholder debug implementation for vorgrs::db::DB"
-    //     );
-    // }
+        // THEN
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].title, title);
+        assert_eq!(items[0].ext, ext);
+        assert_eq!(items[0].hash, hash);
+        assert_eq!(items[0].tags.len(), 1);
+        assert_eq!(items[0].tags[0], "meta:Incomplete");
+        Ok(())
+    }
 }

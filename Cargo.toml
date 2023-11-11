@@ -12,9 +12,10 @@ sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite"] }
 magic = "0.13.0"
 tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread"] }
 lazy_static = "1.4.0"
+rstest = "0.18.2"
+uuid = { version = "1.5.0", features = ["v4", "fast-rng"] }
 
 [dev-dependencies]
-serial_test = "2.0.0"
 test-context = "0.1.4"
 async-trait = "0.1.73"
 
@@ -23,5 +24,5 @@ opt-level = 3
 
 [package.metadata.vcpkg]
 git = "https://github.com/microsoft/vcpkg"
-rev = "9edb1b8"
+rev = "61f610845fb206298a69f708104a51d651872877"
 dependencies = []

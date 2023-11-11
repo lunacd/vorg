@@ -1,2 +1,5 @@
 /target
 /temp
+/.vscode
+/todo.txt
+/codecov.json
