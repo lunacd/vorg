@@ -1,0 +1,21 @@
+add_executable(vorgTests db.t.cpp db_migrate.t.cpp)
+
+find_package(GTest REQUIRED)
+find_package(Boost REQUIRED)
+target_link_libraries(vorgTests PRIVATE
+    GTest::gmock_main
+    GTest::gtest
+    GTest::gmock
+)
+
+# Link against libraries to test
+target_link_libraries(vorgTests PRIVATE
+    vorgDb
+    vorgUtils
+)
+
+target_include_directories(vorgTests PRIVATE ${Boost_INCLUDE_DIRS})
+target_include_directories(vorgTests PRIVATE ../src/db ../src/utils)
+
+include(GoogleTest)
+gtest_discover_tests(vorgTests)

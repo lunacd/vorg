@@ -1,0 +1,12 @@
+# CMake build
+/build/
+
+# Editors
+/.vscode/
+
+# Temp files
+/temp/
+/.cache/
+
+# C++
+/compile_commands.json
