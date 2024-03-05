@@ -6,7 +6,8 @@ Checks: >
   modernize-*,
   performance-*,
   portability-*,
-  readability-*
+  readability-*,
+  -cppcoreguidelines-rvalue-reference-param-not-moved
 
 WarningsAsErrors: "*"
 

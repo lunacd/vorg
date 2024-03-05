@@ -11,4 +11,5 @@ target_sources(vorgDb PRIVATE
 
 find_package(SQLiteCpp CONFIG REQUIRED)
 target_link_libraries(vorgDb PUBLIC SQLiteCpp)
+
 target_include_directories(vorgDb PRIVATE . ../utils)
