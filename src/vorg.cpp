@@ -2,7 +2,7 @@
 
 #include <boost/program_options.hpp>
 
-#include <server/vorg_server.h>
+#include <vorg_server.h>
 
 auto main(int argc, char *argv[]) -> int {
     // Parse command line arguments

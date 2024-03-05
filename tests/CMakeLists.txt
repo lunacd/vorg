@@ -10,8 +10,7 @@ target_link_libraries(vorgTests PRIVATE
 
 # Link against libraries to test
 target_link_libraries(vorgTests PRIVATE
-    vorgDb
-    vorgUtils
+    libVorg
 )
 
 target_include_directories(vorgTests PRIVATE ${Boost_INCLUDE_DIRS})
