@@ -32,3 +32,5 @@ CheckOptions:
   - { key: readability-identifier-naming.GlobalConstantPrefix, value: s_ }
   - { key: readability-identifier-naming.ClassMemberCase, value: camelBack }
   - { key: readability-identifier-naming.ClassMemberPrefix, value: s_ }
+  - { key: readability-identifier-length.MinimumVariableNameLength, value: 2 }
+  - { key: readability-identifier-length.MinimumParameterNameLength, value: 2 }

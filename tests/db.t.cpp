@@ -1,4 +1,3 @@
-// NOLINTBEGIN
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -11,6 +10,7 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
+#include <models/vorg_item.h>
 #include <vorg_db.h>
 
 using namespace ::testing;
@@ -25,6 +25,25 @@ class DbTestFixture : public Test {
             std::filesystem::current_path() / "temp";
         std::filesystem::create_directory(tempPath);
         m_dbPath = tempPath / (boost::uuids::to_string(uuid) + ".db");
+        m_collections.emplace_back(
+            1, "abc",
+            std::vector<Item>{Item{
+                                  "a0d2139fbc5efd9174211f5ade3a2e44fec969c799f1"
+                                  "0c16fde95ee178b4f44e",
+                                  "mp4",
+                              },
+                              Item{
+                                  "bb4208052b8abf47524be1336a002f962f518d10755c"
+                                  "832d7a18050131e70749",
+                                  "avi",
+                              }});
+        m_collections.emplace_back(
+            2, "def",
+            std::vector<Item>{
+                Item{"47f9c6577a35c2ce250bffb97fc5879c4306be6c3dd2833b0c19728"
+                     "671ef4814",
+                     "wmv"},
+            });
     }
 
     void TearDown() override {
@@ -61,13 +80,6 @@ class DbTestFixture : public Test {
                 PRIMARY KEY("item_id"),
                 FOREIGN KEY("collection_id") REFERENCES "collections"("collection_id")
             );
-            CREATE TABLE collection_item (
-                collection_id   INTEGER NOT NULL,
-                item_id         INTEGER NOT NULL,
-                PRIMARY KEY("collection_id","item_id"),
-                FOREIGN KEY("collection_id") REFERENCES "collections"("collection_id"),
-                FOREIGN KEY("item_id") REFERENCES "items"("item_id")
-            );
             CREATE VIRTUAL TABLE title_fts USING fts5 (
                 title,
                 content='collections',
@@ -95,17 +107,66 @@ class DbTestFixture : public Test {
         applySql(sql);
     }
 
+    void setupSampleData() {
+        int collectionId = 1;
+        auto connection = getConnection();
+        const char *addCollectionSql = R"(
+            INSERT INTO collections(collection_id, title)
+                VALUES (?, ?);
+        )";
+        SQLite::Statement addCollectionStmt{connection, addCollectionSql};
+        const char *addItemSql = R"(
+            INSERT INTO items(collection_id, item_id, hash, ext)
+                VALUES (?, ?, ?, ?);
+        )";
+        SQLite::Statement addItemStmt{connection, addItemSql};
+        for (int collectionId = 1, itemId = 1;
+             const auto &collection : m_collections) {
+            addCollectionStmt.bind(1, collectionId);
+            addCollectionStmt.bind(2, collection.title());
+            addCollectionStmt.exec();
+            addCollectionStmt.reset();
+
+            for (const auto &collectionItem : collection.items()) {
+                addItemStmt.bind(1, collectionId);
+                addItemStmt.bind(2, itemId);
+                addItemStmt.bind(3, collectionItem.hash());
+                addItemStmt.bind(4, collectionItem.ext());
+                addItemStmt.exec();
+                addItemStmt.reset();
+
+                ++itemId;
+            }
+
+            ++collectionId;
+        }
+    }
+
     void applySql(const char *sql) const {
         SQLite::Database connection(m_dbPath.string(), SQLite::OPEN_READWRITE |
                                                            SQLite::OPEN_CREATE);
         connection.exec(sql);
     }
 
-    auto dbPath() -> const std::filesystem::path & { return m_dbPath; }
+    [[nodiscard]] auto getConnection() const -> SQLite::Database {
+        return {m_dbPath.string(),
+                SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE};
+    }
+
+    [[nodiscard]] auto dbPath() const -> const std::filesystem::path & {
+        return m_dbPath;
+    }
+
+    [[nodiscard]] auto collections() const -> const std::vector<Collection> & {
+        return m_collections;
+    }
 
   private:
     std::filesystem::path m_dbPath;
+    std::vector<Collection> m_collections;
 };
+
+// NOLINTBEGIN
 
 TEST_F(DbTestFixture, CreateFull) {
     // This test exploits the fact that constructing a Vorg::Db on a
@@ -142,7 +203,7 @@ TEST_F(DbTestFixture, CreateBasic) {
     // Table
     ASSERT_TRUE(query.executeStep());
     ASSERT_THAT(static_cast<std::string>(query.getColumn("type")), Eq("table"));
-    ASSERT_THAT(static_cast<int>(query.getColumn("count")), Eq(10));
+    ASSERT_THAT(static_cast<int>(query.getColumn("count")), Eq(9));
     // Index
     ASSERT_TRUE(query.executeStep());
     ASSERT_THAT(static_cast<std::string>(query.getColumn("type")),
@@ -154,7 +215,7 @@ TEST_F(DbTestFixture, ValidateMissingTable) {
     // GIVEN
     bootstrapDb();
     const char *missingTableSql = R"(
-        DROP TABLE collection_item;
+        DROP TABLE collection_tag;
     )";
     applySql(missingTableSql);
 
@@ -283,6 +344,24 @@ TEST_F(DbTestFixture, ValidateExtraTrigger) {
     // WHEN
     // THEN
     EXPECT_THROW(Db::connect(dbPath()), std::runtime_error);
+}
+
+TEST_F(DbTestFixture, GetCollectionsBasic) {
+    // GIVEN
+    bootstrapDb();
+    setupSampleData();
+
+    // WHEN
+    auto sut = Db::connect(dbPath());
+    auto resultCollections = sut.getCollections();
+
+    // THEN
+    ASSERT_THAT(resultCollections.size(), Eq(2));
+    for (size_t index = 0; const auto &collection : resultCollections) {
+        ASSERT_THAT(collection, Eq(collections().at(index)));
+
+        ++index;
+    }
 }
 } // namespace Vorg::Tests
 

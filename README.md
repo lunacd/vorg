@@ -43,13 +43,6 @@ CREATE TABLE items (
     PRIMARY KEY("item_id"),
     FOREIGN KEY("collection_id") REFERENCES "collections"("collection_id")
 );
-CREATE TABLE collection_item (
-    collection_id   INTEGER NOT NULL,
-    item_id         INTEGER NOT NULL,
-    PRIMARY KEY("collection_id","item_id"),
-    FOREIGN KEY("collection_id") REFERENCES "collections"("collection_id"),
-    FOREIGN KEY("item_id") REFERENCES "items"("item_id")
-);
 CREATE VIRTUAL TABLE title_fts USING fts5 (
     title,
     content='collections',

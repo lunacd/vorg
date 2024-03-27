@@ -12,6 +12,8 @@
 #include <SQLiteCpp/Database.h>
 #include <SQLiteCpp/Statement.h>
 
+#include <models/vorg_collection.h>
+
 namespace Vorg {
 namespace {
 void vorgCreateDb(SQLite::Database &connection) {
@@ -30,13 +32,6 @@ void vorgCreateDb(SQLite::Database &connection) {
             hash VARCHAR(64) NOT NULL,
             ext TEXT NOT NULL,
             FOREIGN KEY (collection_id) REFERENCES collections(collection_id)
-        );
-        CREATE TABLE collection_item (
-            collection_id INTEGER NOT NULL,
-            item_id INTEGER NOT NULL,
-            PRIMARY KEY (collection_id, item_id),
-            FOREIGN KEY (collection_id) REFERENCES collections(collection_id),
-            FOREIGN KEY (item_id) REFERENCES items(item_id)
         );
         CREATE TABLE collection_tag (
             collection_id INTEGER NOT NULL,
@@ -78,11 +73,6 @@ auto vorgValidateTableColumns(const SQLite::Database &connection,
                                  {
                                      {"collection_id", "INTEGER"},
                                      {"title", "TEXT"},
-                                 }},
-                                {"collection_item",
-                                 {
-                                     {"collection_id", "INTEGER"},
-                                     {"item_id", "INTEGER"},
                                  }},
                                 {"collection_tag",
                                  {
@@ -136,8 +126,8 @@ auto vorgValidateTableColumns(const SQLite::Database &connection,
 
 auto vorgValidateDb(const SQLite::Database &connection) -> bool {
     // Expected table data
-    constexpr std::array<const char *, 5> s_expectedTableNames = {
-        "collection_item", "collection_tag", "collections", "items", "tags"};
+    constexpr std::array<const char *, 4> s_expectedTableNames = {
+        "collection_tag", "collections", "items", "tags"};
     constexpr std::array<const char *, 2> s_expectedIndexNames = {"hash_index",
                                                                   "tag_index"};
     constexpr std::array<const char *, 3> s_expectedTriggerNames = {
@@ -248,6 +238,36 @@ auto Db::connect(const std::filesystem::path &dbPath) -> Db {
                                 SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE};
     vorgCreateDb(connection);
     return Db{std::move(connection)};
+}
+
+auto Db::getCollections() -> std::vector<Collection> {
+    SQLite::Transaction transaction{m_connection};
+    SQLite::Statement getCollectionsStmt{m_connection, R"(
+        SELECT collection_id, title FROM collections 
+    )"};
+    SQLite::Statement getItemsStmt{m_connection, R"(
+        SELECT item_id, ext, hash FROM items WHERE collection_id=?
+    )"};
+    std::vector<Collection> collections;
+    while (getCollectionsStmt.executeStep()) {
+        int collectionId =
+            getCollectionsStmt.getColumn("collection_id").getInt();
+        std::string title = getCollectionsStmt.getColumn("title").getString();
+
+        std::vector<Item> items;
+        getItemsStmt.bind(1, collectionId);
+        while (getItemsStmt.executeStep()) {
+            std::string hash = getItemsStmt.getColumn("hash").getString();
+            std::string ext = getItemsStmt.getColumn("ext").getString();
+            items.emplace_back(hash, ext);
+        }
+        getItemsStmt.reset();
+
+        collections.emplace_back(collectionId, std::move(title),
+                                 std::move(items));
+    }
+    transaction.commit();
+    return collections;
 }
 
 Db::Db(SQLite::Database &&connection) : m_connection{std::move(connection)} {}

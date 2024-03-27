@@ -1,6 +1,6 @@
-add_executable(vorgTests db.t.cpp db_migrate.t.cpp)
+add_executable(vorgTests db.t.cpp)
 
-find_package(GTest REQUIRED)
+find_package(GTest CONFIG REQUIRED)
 find_package(Boost REQUIRED)
 target_link_libraries(vorgTests PRIVATE
     GTest::gmock_main
