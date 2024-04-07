@@ -13,6 +13,7 @@
         "sqlitecpp",
         "gtest",
         "boost-uuid",
-        "boost-program-options"
+        "boost-program-options",
+        "boost-log"
     ]
 }

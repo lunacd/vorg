@@ -3,6 +3,8 @@
 
 #include <string>
 
+#include <crow.h>
+
 namespace Vorg {
 class Item {
   public:
@@ -12,9 +14,12 @@ class Item {
     [[nodiscard]] auto hash() const -> const std::string & { return m_hash; }
     [[nodiscard]] auto ext() const -> const std::string & { return m_ext; }
 
-    auto operator==(const Item &rhs) const -> bool {
+    [[nodiscard]] auto operator==(const Item &rhs) const -> bool {
         return m_hash == rhs.m_hash && m_ext == m_ext;
     }
+
+    [[nodiscard]] auto storePath() const -> std::string;
+    [[nodiscard]] auto toJson() const -> crow::json::wvalue;
 
   private:
     std::string m_hash;

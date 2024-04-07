@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include <crow.h>
+
 #include <models/vorg_item.h>
 
 namespace Vorg {
@@ -17,10 +19,12 @@ class Collection {
         return m_items;
     }
 
-    auto operator==(const Collection &rhs) const -> bool {
+    [[nodiscard]] auto operator==(const Collection &rhs) const -> bool {
         return m_id == rhs.m_id && m_title == rhs.m_title &&
                m_items == rhs.m_items;
     }
+
+    [[nodiscard]] auto toJson() const -> crow::json::wvalue;
 
   private:
     int m_id;

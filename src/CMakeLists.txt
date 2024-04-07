@@ -32,3 +32,6 @@ target_link_libraries(libVorg PRIVATE SQLiteCpp)
 
 find_package(Crow CONFIG REQUIRED)
 target_link_libraries(libVorg PRIVATE Crow::Crow)
+
+find_package(Boost REQUIRED COMPONENTS log)
+target_link_libraries(libVorg PRIVATE Boost::log)

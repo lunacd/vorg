@@ -226,18 +226,27 @@ auto Db::connect(const std::filesystem::path &dbPath) -> Db {
 
     if (dbExists) {
         // If database exists, validate it before constructing DB
-        SQLite::Database connection{dbPath.string(), SQLite::OPEN_READWRITE};
-        if (!vorgValidateDb(connection)) {
-            throw std::runtime_error("The vorg database is corrupted.");
+        try {
+            SQLite::Database connection{dbPath.string(),
+                                        SQLite::OPEN_READWRITE};
+            if (!vorgValidateDb(connection)) {
+                throw std::runtime_error("The vorg database is corrupted.");
+            }
+            return Db{std::move(connection)};
+        } catch (const SQLite::Exception &ex) {
+            throw std::runtime_error("The vorg database is not a valid SQLite database.");
         }
-        return Db{std::move(connection)};
     }
 
     // If database does not exist, construct a new one instead
-    SQLite::Database connection{dbPath.string(),
-                                SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE};
-    vorgCreateDb(connection);
-    return Db{std::move(connection)};
+    try {
+        SQLite::Database connection{dbPath.string(), SQLite::OPEN_READWRITE |
+                                                         SQLite::OPEN_CREATE};
+        vorgCreateDb(connection);
+        return Db{std::move(connection)};
+    } catch (const SQLite::Exception &ex) {
+        throw std::runtime_error("Failed to create a new vorg database.");
+    }
 }
 
 auto Db::getCollections() -> std::vector<Collection> {
