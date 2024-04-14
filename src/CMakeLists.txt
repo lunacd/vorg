@@ -35,3 +35,5 @@ target_link_libraries(libVorg PRIVATE Crow::Crow)
 
 find_package(Boost REQUIRED COMPONENTS log)
 target_link_libraries(libVorg PRIVATE Boost::log)
+
+install(TARGETS vorg)

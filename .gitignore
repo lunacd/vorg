@@ -3,6 +3,7 @@
 
 # Editors
 /.vscode/
+/.dir-locals.el
 
 # Temp files
 /temp/
