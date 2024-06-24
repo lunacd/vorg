@@ -27,13 +27,10 @@ target_sources(libVorg PUBLIC
 target_include_directories(libVorg PRIVATE . ./server)
 target_link_libraries(vorg PRIVATE libVorg)
 
-find_package(SQLiteCpp CONFIG REQUIRED)
+find_package(SQLiteCpp REQUIRED)
 target_link_libraries(libVorg PRIVATE SQLiteCpp)
 
-find_package(Crow CONFIG REQUIRED)
-target_link_libraries(libVorg PRIVATE Crow::Crow)
-
-find_package(Boost REQUIRED COMPONENTS log)
+find_package(Boost REQUIRED COMPONENTS log system)
 target_link_libraries(libVorg PRIVATE Boost::log)
 
 install(TARGETS vorg)

@@ -1,18 +1,18 @@
 {
-    "version": 3,
-    "configurePresets": [
-        {
-            "name": "default",
-            "binaryDir": "${sourceDir}/build",
-	    "generator": "Ninja",
-            "cacheVariables": {
-                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
-            },
-            "environment": {
-                "CC": "gcc",
-                "CXX": "g++"
-            }
-        }
-    ]
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "default",
+      "binaryDir": "${sourceDir}/build",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_CXX_STANDARD": "20"
+      },
+      "environment": {
+        "CC": "gcc",
+        "CXX": "g++"
+      }
+    }
+  ]
 }

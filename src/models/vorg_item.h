@@ -3,7 +3,7 @@
 
 #include <string>
 
-#include <crow.h>
+// #include <crow.h>
 
 namespace Vorg {
 class Item {
@@ -19,7 +19,7 @@ class Item {
     }
 
     [[nodiscard]] auto storePath() const -> std::string;
-    [[nodiscard]] auto toJson() const -> crow::json::wvalue;
+    // [[nodiscard]] auto toJson() const -> crow::json::wvalue;
 
   private:
     std::string m_hash;
