@@ -1,4 +1,4 @@
-#include <vorg_db.h>
+#include <vorg_db.hpp>
 
 #include <array>
 #include <cassert>
@@ -12,7 +12,7 @@
 #include <SQLiteCpp/Database.h>
 #include <SQLiteCpp/Statement.h>
 
-#include <models/vorg_collection.h>
+#include <models/vorg_collection.hpp>
 
 namespace Vorg {
 namespace {
@@ -234,7 +234,8 @@ auto Db::connect(const std::filesystem::path &dbPath) -> Db {
             }
             return Db{std::move(connection)};
         } catch (const SQLite::Exception &ex) {
-            throw std::runtime_error("The vorg database is not a valid SQLite database.");
+            throw std::runtime_error(
+                "The vorg database is not a valid SQLite database.");
         }
     }
 

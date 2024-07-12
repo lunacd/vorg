@@ -3,7 +3,7 @@
 
 #include <boost/program_options.hpp>
 
-#include <vorg_server.h>
+#include <vorg_server.hpp>
 
 namespace po = boost::program_options;
 
@@ -70,7 +70,9 @@ Commands:
         }
         std::filesystem::path repoPath{
             serverOptions.at("repository").as<std::string>()};
-        Vorg::runServer(repoPath);
+
+        Vorg::Server server{};
+        server.run();
     }
 
     return 0;

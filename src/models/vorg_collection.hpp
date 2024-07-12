@@ -6,7 +6,7 @@
 
 // #include <crow.h>
 
-#include <models/vorg_item.h>
+#include <models/vorg_item.hpp>
 
 namespace Vorg {
 class Collection {

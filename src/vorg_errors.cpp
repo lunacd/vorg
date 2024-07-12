@@ -1,4 +1,4 @@
-#include <vorg_errors.h>
+#include <vorg_errors.hpp>
 
 #include <string>
 

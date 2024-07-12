@@ -1,5 +1,5 @@
-#ifndef VORG_UTILS_ERROR_H
-#define VORG_UTILS_ERROR_H
+#ifndef VORG_UTILS_ERROR_HPP
+#define VORG_UTILS_ERROR_HPP
 
 #include <string>
 

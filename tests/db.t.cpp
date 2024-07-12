@@ -1,4 +1,3 @@
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -10,8 +9,8 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
-#include <models/vorg_item.h>
-#include <vorg_db.h>
+#include <models/vorg_item.hpp>
+#include <vorg_db.hpp>
 
 using namespace ::testing;
 

@@ -1,12 +1,12 @@
-#ifndef VORG_DB_H
-#define VORG_DB_H
+#ifndef VORG_DB_HPP
+#define VORG_DB_HPP
 
 #include <filesystem>
 #include <vector>
 
 #include <SQLiteCpp/SQLiteCpp.h>
 
-#include <models/vorg_collection.h>
+#include <models/vorg_collection.hpp>
 
 namespace Vorg {
 class Db {
